@@ -1,0 +1,186 @@
+<html>
+    <head>
+    	<title>Logs from Block Bot</title>
+        <script src="http://ajax.googleapis.com/ajax/libs/dojo/1.8.3/dojo/dojo.js"></script>
+        <script type="text/javascript">
+       dojo.require("dojox.grid.EnhancedGrid");
+	   dojo.require("dojox.grid.enhanced.plugins.Pagination");
+	   dojo.require("dojo.store.Memory");
+	   dojo.require("dojo.data.ObjectStore");
+	   dojo.require("dijit.form.DateTextBox");
+	   dojo.require("dojox.form.DropDownSelect");
+	   dojo.require("dijit.form.CheckBox");
+	   
+	   // grid variable
+       var grid_log_all,re,all_data;
+       var log_all = new Array();
+		// Check that the initial load has occured
+		var loaded=false;
+	    
+       dojo.addOnLoad(function() {
+     			
+	    	// log_name,date,log_level,message
+			var layout_log = [[
+	    		{field: "log_name",name: "Log Name",width: '200px',datatype: "string", autoComplete: true},
+            	{field: "date",name: "Date and Time",width: '120px',datatype: "string", autoComplete: true},
+            	{field: "log_level",name: "Log Level",width: '60px',datatype: "string", autoComplete: true},
+            	{field: "message",name: "Message",width: '900px',datatype: "string", autoComplete: true}
+            	]];
+  
+	     	// create a new grid:
+         	grid_log_all = new dojox.grid.EnhancedGrid({
+         			id: "log_grid",
+                    clientSort: false,   
+                    rowSelector: '20px',
+                    plugins:{
+    				    pagination: {
+			              pageSizes: ["25", "50", "100", "All"],
+			              description: true,
+			              sizeSwitch: true,
+			              pageStepper: true,
+			              gotoButton: true,
+			                      /*page step to be displayed*/
+			              maxPageStep: 4,
+			                      /*position of the pagination bar*/
+			              position: "top"
+			          }
+  					},
+                    structure: layout_log,
+                    errorMessage: "Sorry no data"
+                } , document.createElement('div'));
+
+          	// append the new grid to the div "gridContainer4":
+          	dojo.byId("grid_container_log_all").appendChild(grid_log_all.domNode);
+                    
+            // Call startup, in order to render the grid:
+            grid_log_all.startup();
+            
+            // Connect to onClick
+            dojo.connect(grid_log_all, "onRowClick", onRowClickHandler);
+            
+			getData();
+			
+        });
+        
+     function onRowClickHandler(evt){
+        var clicked= grid_txn_all.getItem(evt.rowIndex);
+         search(clicked.log_name+","+clicked.log_level+","+d.message);
+      }
+        
+		/* Update the query regular expression when text is entered. */
+		function search(text) {
+		  if (text != re) {
+		    if (query.value != text) {
+		      query.value = text;
+		    }
+		    re = new RegExp(text, "i");
+		    setStore();
+		  }
+		}
+
+        /* Tests to see whether the specified datum matches the current filters. */
+		function test(d) {
+  			return ((d.log_name+","+d.log_level+","+d.message).match(re)) ;
+		}
+        
+        function setStore() {
+        	 //console.log(all_data);
+       		txn_all = new Array();
+        	for (var key in all_data) {
+		        // Get the values and add to the data array
+	 			txn_all.push({log_name: all_data[key].log_name, date: all_data[key].date, 
+	 				log_level: all_data[key].log_level, message: all_data[key].message
+	 			}); 
+            }
+        	var new_array = new dojo.store.Memory({data: txn_all.filter(test)});
+	       //console.log(JSON.stringify(txn_all.filter(test)));
+        	grid_log_all.setStore(new dojo.data.ObjectStore({
+                objectStore : new_array
+        	}));  
+            query.focus();
+			loaded=true;
+            //console.log(JSON.stringify(txn_all));
+        }
+        
+        function getData(){
+        	// Hour to return data for
+        	// Make sure global arrays are reset
+    		all_data = new Array();
+       		   
+			 dojo.xhrGet({
+   	 			url:"logs.csv",
+   	 			handleAs:"text",
+    			load: function(data){
+    				var arr = data.split(/\n/g);
+    				console.log("lines="+arr.length);
+					for (var i=1;i<arr.length;i++) {
+						parseLineCSV(arr[i]);
+				    }	
+				    setStore();
+    			},
+    			 error: function(error) {
+    			 					// Set blank store so we get an error message to say no data
+                                	grid_log_all.setStore(new dojo.data.ObjectStore({
+                   					objectStore : {}}));   
+                 }
+		 	 });
+        }
+        
+		function parseLineCSV(lineCSV,filter) {
+  			bits = lineCSV.split(/,/g);
+  			if (bits.length<3){return;}
+  			// bits of line are ->
+  	        // log_name,date,log_level,message
+ 	        var log_name = bits[0];
+ 			var date = bits[1];
+ 			var log_level = bits[2];
+ 			var message = bits[3];
+	 		citem ={log_name: log_name, date: date, log_level: log_level, message: message };
+	 		// just put it in
+ 			all_data[log_name+log_level+message]=citem;
+ 			//console.log(JSON.stringify(all_data));
+		}
+		
+        </script>
+    	<link rel="stylesheet" href="http://ajax.googleapis.com/ajax/libs/dojo/1.8.3/dijit/themes/claro/claro.css">
+    	<style type="text/css">@import "http://ajax.googleapis.com/ajax/libs/dojo/1.8.3/dojo/resources/dojo.css";
+    	@import "http://ajax.googleapis.com/ajax/libs/dojo/1.8.3/dijit/themes/claro/claro.css";
+    	@import "http://ajax.googleapis.com/ajax/libs/dojo/1.8.3/dojox/grid/enhanced/resources/claro/EnhancedGrid.css";
+    	@import "http://ajax.googleapis.com/ajax/libs/dojo/1.8.3/dojox/grid/enhanced/resources/EnhancedGrid_rtl.css";
+    	
+    	/*Grid need a explicit width/height by default*/
+    	#grid {
+    		width: 45em;
+    		height: 20em;
+    	}
+    	</style>
+    </head> 
+    <body class="tundra">
+    <div style="padding-left:5;">
+    	<table>
+    	<tr>
+    		<td>
+    			<div id="txn_date"></div>
+			</td>
+		</tr>
+    	<tr>
+    		<td valign="bottom">
+   				    <div id="search">
+					      <label for="query">Search: </label>
+					      <input id="query" type="text" size="60" onkeyup="if(this.value.length>2||this.value.length==0){search(this.value)}">
+					 </div> 
+    		</td><td>&nbsp;</td><td valign="bottom">
+    		
+    		</td><td>&nbsp;&nbsp;&nbsp;&nbsp;</td><td valign="bottom">
+				
+    		</td>
+    		<td>
+    		
+    		</td>
+    	 </tr>
+    	 </table>
+
+    	<div id="grid_container_log_all" style="width: 100%; height: 100%;"></div>
+    </div>
+    </body>
+</html>	

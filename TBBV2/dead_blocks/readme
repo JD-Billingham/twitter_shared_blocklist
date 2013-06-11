@@ -1,0 +1,3 @@
+The cleanup_blocklist will move any blocks that just simply do not exist any more
+Either id or screen name -> however if screen name has just changed then it is rewritten 
+not copied here

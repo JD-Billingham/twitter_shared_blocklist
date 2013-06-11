@@ -1,0 +1,3 @@
+Recommended this is protected using HTTP auth via .htaccess
+Otherwise all members of the blocklist can be seen - anonymity is guaranteed for the A+ bot
+user:blockbot pass:slymedroolz

@@ -1,0 +1,5 @@
+Only the files that have changed from the php twitteroauth project are here. 
+So download and install from https://github.com/abraham/twitteroauth under your web root
+in a directory like <web_root>/the_block_bot
+
+This is then your registration URL.

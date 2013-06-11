@@ -1,0 +1,7 @@
+The index.php in <web_root>/the_block_bot writes these files out 
+They are named the same as blocks and authorised users id¬screen_name but they have auth data in them
+Like this : ->
+file: 16343333¬a_name
+inside: 16343333-D83ETRGVgFqGItD3RpsvOwbF6tOSsCeN6dDt62cjK,j6zJxdSIvoeRKdscKSU4ov39oPUjJyt8zXRV22aA
+where that is ACCESSTOKEN,ACCESSTOKENSECRET
+
