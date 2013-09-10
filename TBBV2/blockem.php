@@ -119,12 +119,17 @@ for ($i=0; $i<=(count($users[0])-1); $i++)
 							$is_spam=is_user_spam($x_users_to_block[$x]);
 						}
 						if ($is_spam){
-							$connection->post('users/report_spam', array('user_id' => $x_users_to_block[$x]));
-							log_it("INFO","SPAM BLOCKED USER : ".$x_users_to_block[$x]." FOR USER ".$current_user);
+							#$connection->post('users/report_spam', array('user_id' => $x_users_to_block[$x]));
+							#log_it("INFO","SPAM BLOCKED USER : ".$x_users_to_block[$x]." FOR USER ".$current_user);
+							# Disabled to comply with Twitter API rules
+							# Add in different message when account is spam/abuse to encourage people to report it
+							$connection->post('blocks/create', array('user_id' => $x_users_to_block[$x]));
+                                                        log_it("INFO","BLOCKED USER : ".$x_users_to_block[$x]." FOR USER ".$current_user);
 						} else {
 							$connection->post('blocks/create', array('user_id' => $x_users_to_block[$x]));
 							log_it("INFO","BLOCKED USER : ".$x_users_to_block[$x]." FOR USER ".$current_user);
 						}
+
 					} else {
 						$blockee_screen_name=get_screen_name($x_users_to_block[$x],$connection);
 						log_it("ERROR","BLOCKEE NOT VALID : ".$x_users_to_block[$x]."¬".$blockee_screen_name." TRIED TO BLOCK FOR USER ".$current_user);
