@@ -2,22 +2,6 @@
 /**
 * @file
 * Reads the_block_bot mentions and any adds to block list or authorised users are processed
- *     Licensed to the Apache Software Foundation (ASF) under one
-       or more contributor license agreements.  See the NOTICE file
-       distributed with this work for additional information
-       regarding copyright ownership.  The ASF licenses this file
-       to you under the Apache License, Version 2.0 (the
-       "License"); you may not use this file except in compliance
-       with the License.  You may obtain a copy of the License at
-
-         http://www.apache.org/licenses/LICENSE-2.0
-
-       Unless required by applicable law or agreed to in writing,
-       software distributed under the License is distributed on an
-       "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-       KIND, either express or implied.  See the License for the
-       specific language governing permissions and limitations
-       under the License.
 */
 require_once('/var/www/html/sign_up/twitteroauth/twitteroauth.php');
 require_once('/var/www/html/sign_up/config.php');
@@ -34,7 +18,7 @@ if (check_lock()){
 $connection = new TwitterOAuth(CONSUMER_KEY, CONSUMER_SECRET, BB_ACCESSTOKEN, BB_ACCESSTOKENSECRET);
 
 # Needs to be under 180 as is_valid_user calls a rate limited API call: 30 seems to work well
-$timeline = $connection->get("statuses/mentions_timeline",array('count' => 30));
+$timeline = $connection->get("statuses/mentions_timeline",array('count' => 100));
 #print_r($timeline);
 
 # Need to make sure no more than x are added in one interval
@@ -45,6 +29,16 @@ $max=20; # Low number but will really piss people off if it tweets more than thi
 
 # Do Blocks
 foreach($timeline as $tweet){
+	# So any tweet with #report or #block in it is to be saved to tweet reports for audit / sharing of tweets
+	if (preg_match("/#block/i", $tweet->text, $tmp) || preg_match("/#report/i", $tweet->text, $tmp)){
+		# Write it out to the directory
+		if (!file_exists(ROOT_DIR."/reports/tweets/".$tweet->user->screen_name."_".$tweet->id_str.".json")) {
+			$handle = fopen(ROOT_DIR."/reports/tweets/".$tweet->user->screen_name."_".$tweet->id_str.".json", 'w') or die("Cannot open file: ".ROOT_DIR."/reports/tweets/".$tweet->screen_name."_".$tweet->id_str.".json");
+			fwrite($handle, json_encode($tweet));
+			fclose($handle);
+		}
+	}
+	# Now handle the block commands
 	if (preg_match("/#Block/i", $tweet->text, $tmp)){
 	    preg_match_all("/\+(\S+)/i", $tweet->text, &$results);
 		foreach ($results[0] as $result){
@@ -87,12 +81,13 @@ foreach($timeline as $tweet){
 								}
 							}
 							if (!$created) {
-								log_it("INFO","USER ALREADY IN BLOCKLIST: ".$blockee);
+								log_it("INFO","USER ALREADY IN BLOCKLIST: ".$blockee." BLOCKER:".$tweet->user->screen_name);
 							} else {
-								log_it("INFO","USER ADDED TO BLOCKLIST: ".$blockee);
-								$connection->post('statuses/update', array('status' => 'I just added https://twitter.com/'.$blockee.' to my level '.$block_level.' blocklist #AtheismPlus'));
+								log_it("INFO","USER ADDED TO BLOCKLIST: ".$blockee." BLOCKER:".$tweet->user->screen_name);
+								$connection->post('statuses/update', array('status' => 'I just added https://twitter.com/'.$blockee.' to my level '.$block_level.' blocklist #AtheismPlus https://twitter.com/the_block_bot/status/'.$tweet->id_str));
 								# Do no more than X or risk getting kicked off Twitter...
 								$api_count++;
+								usleep(0.5*1000000);
 								if ($api_count>=$max){
 									stop_clock($starttime,"API LIMIT EXIT: GET BLOCKS : BLOCK");
 									exit;
@@ -198,7 +193,7 @@ foreach($timeline as $tweet){
 	if (preg_match("/#RemoveFromBlockList/i", $tweet->text, $tmp)){
 		preg_match_all("/\@(\S+)/i", $tweet->text, &$results);
 		foreach ($results[0] as $result){
-			if (is_admin($tweet->user->screen_name)||is_super_admin($tweet->user->screen_name)){
+			if (is_authorised_user($tweet->user->screen_name)){
 				$blocked_user=preg_replace('/@/', '', $result);
 				$blocked_user = strtolower($blocked_user);
 				if (!is_removed_block($blocked_user)) {
