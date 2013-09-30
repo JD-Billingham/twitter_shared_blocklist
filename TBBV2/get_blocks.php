@@ -17,8 +17,22 @@ if (check_lock()){
 /* Create a TwitterOauth object with consumer/user tokens. */
 $connection = new TwitterOAuth(CONSUMER_KEY, CONSUMER_SECRET, BB_ACCESSTOKEN, BB_ACCESSTOKENSECRET);
 
+# Make sure tweets got are after the last one retreived
+$last_tweet_id=0;
+if (file_exists(ROOT_DIR."/last_getblocks.json")) {
+	$handle = fopen(ROOT_DIR."/last_getblocks.json", 'r') or die('nodate,FATAL,Cannot open file: '.ROOT_DIR."/last_getblocks.json");
+	$line = fgets($handle);
+	$obj = json_decode($line);
+	fclose($handle);
+	$last_tweet_id = $obj->{'last_tweet_id'}; // 12345
+}
+
 # Needs to be under 180 as is_valid_user calls a rate limited API call: 30 seems to work well
-$timeline = $connection->get("statuses/mentions_timeline",array('count' => 100));
+if ($last_tweet_id>0){
+	$timeline = $connection->get("statuses/mentions_timeline",array('count' => 100, "since_id" => "$last_tweet_id"));
+} else {
+	$timeline = $connection->get("statuses/mentions_timeline",array('count' => 100));
+}
 #print_r($timeline);
 
 # Need to make sure no more than x are added in one interval
@@ -53,38 +67,69 @@ foreach($timeline as $tweet){
 						if ($user_id>0){
 							#Now need to check what level of block they are...
 							$block_level=3;
-							$block_or_spam="block";
+							$abuse_or_spam=false;
 							# Need to check to see if the blockee actually ended up in any new block list L1/2/3
 							$created = false;
+							$reported = false;
+							# Only at Do abuse check... Direct to report for abuse if set
+							if (preg_match("/#spam|#abuse/i", $tweet->text, $tmp)){
+								$abuse_or_spam=true;
+							}
 							if (preg_match("/(#SuperSlimy|#Level1)/i", $tweet->text, $tmp)){
 								$block_level=1;
-								# Only at level 1, do spam check...
-								if (preg_match("/#spam/i", $tweet->text, $tmp)){
-									$block_or_spam="spam";
-								}
-								if (create_file(BLOCKS_L1.$user_id.'¬'.$blockee,$block_or_spam)) {
+								# ALWAYS create -> NO review.. These are rarely ambiguous. Will have to just remove any mistakes
+								# just in case they have been promoted!
+								if (file_exists(BLOCKS_L2.$user_id.'¬'.$blockee)){unlink(BLOCKS_L2.$user_id.'¬'.$blockee);}
+								if (file_exists(BLOCKS_L3.$user_id.'¬'.$blockee)){unlink(BLOCKS_L3.$user_id.'¬'.$blockee);}
+								if (file_exists(BLOCKS_L4.$user_id.'¬'.$blockee)){unlink(BLOCKS_L4.$user_id.'¬'.$blockee);}
+								# If already there don't want to tweet about it
+								if (create_file(BLOCKS_L1.$user_id.'¬'.$blockee,"")) {
 									$created = true;
-									# just in case they have been promoted!
-									unlink(BLOCKS_L2.$user_id.'¬'.$blockee);
-									unlink(BLOCKS_L3.$user_id.'¬'.$blockee);
 								} 
 							} else if (preg_match("/(#PeskyPittizen|#Level2)/i", $tweet->text, $tmp) && !file_exists(BLOCKS_L1.$user_id.'¬'.$blockee)){
 								$block_level=2;
-								if (create_file(BLOCKS_L2.$user_id.'¬'.$blockee,$block_or_spam)) {
-									$created = true;
-									# just in case they have been promoted!
-									unlink(BLOCKS_L3.$user_id.'¬'.$blockee);
+								if (is_in_blocklist($user_id,$blockee)) {
+									# just in case they have been promoted or demoted!
+									if (file_exists(BLOCKS_L1.$user_id.'¬'.$blockee)){unlink(BLOCKS_L2.$user_id.'¬'.$blockee);}
+									if (file_exists(BLOCKS_L3.$user_id.'¬'.$blockee)){unlink(BLOCKS_L3.$user_id.'¬'.$blockee);}
+									if (file_exists(BLOCKS_L4.$user_id.'¬'.$blockee)){unlink(BLOCKS_L4.$user_id.'¬'.$blockee);}
+									# If already there don't want to tweet about it
+									if (create_file(BLOCKS_L2.$user_id.'¬'.$blockee,"")) {
+										$created = true;
+									}
+								} else {
+									# Just add to the reporting level
+									create_file(BLOCKS_L4.$user_id.'¬'.$blockee,"");
+									$reported = true;
 								}
 							} else if (!file_exists(BLOCKS_L1.$user_id.'¬'.$blockee) && !file_exists(BLOCKS_L2.$user_id.'¬'.$blockee)){
-								if (create_file(BLOCKS_L3.$user_id.'¬'.$blockee,$block_or_spam)) {
-									$created = true;
+								if (is_in_blocklist($user_id,$blockee)) {
+									# just in case they have been promoted or demoted!
+									if (file_exists(BLOCKS_L1.$user_id.'¬'.$blockee)){unlink(BLOCKS_L2.$user_id.'¬'.$blockee);}
+									if (file_exists(BLOCKS_L2.$user_id.'¬'.$blockee)){unlink(BLOCKS_L3.$user_id.'¬'.$blockee);}
+									if (file_exists(BLOCKS_L4.$user_id.'¬'.$blockee)){unlink(BLOCKS_L4.$user_id.'¬'.$blockee);}
+									# If already there don't want to tweet about it
+									if (create_file(BLOCKS_L3.$user_id.'¬'.$blockee,"")) {
+										$created = true;
+									}
+								} else {
+									# Just add to the reporting level
+									create_file(BLOCKS_L4.$user_id.'¬'.$blockee,"");
+									$reported = true;
 								}
 							}
 							if (!$created) {
 								log_it("INFO","USER ALREADY IN BLOCKLIST: ".$blockee." BLOCKER:".$tweet->user->screen_name);
+								if ($reported) {
+									$connection->post('statuses/update', array('status' => 'Please review REPORT on https://twitter.com/'.$blockee.', requires second blocker to confirm addition #AtheismPlus https://twitter.com/the_block_bot/status/'.$tweet->id_str));
+								}
 							} else {
 								log_it("INFO","USER ADDED TO BLOCKLIST: ".$blockee." BLOCKER:".$tweet->user->screen_name);
-								$connection->post('statuses/update', array('status' => 'I just added https://twitter.com/'.$blockee.' to my level '.$block_level.' blocklist #AtheismPlus https://twitter.com/the_block_bot/status/'.$tweet->id_str));
+								if ($abuse_or_spam) {
+										$connection->post('statuses/update', array('status' => 'I just added https://twitter.com/'.$blockee.' to my L'.$block_level.' blocklist #AtheismPlus https://twitter.com/the_block_bot/status/'.$tweet->id_str.' -> Report abusive user https://support.twitter.com/forms/'));
+								} else {
+										$connection->post('statuses/update', array('status' => 'I just added https://twitter.com/'.$blockee.' to my L'.$block_level.' blocklist #AtheismPlus https://twitter.com/the_block_bot/status/'.$tweet->id_str));
+								}
 								# Do no more than X or risk getting kicked off Twitter...
 								$api_count++;
 								usleep(0.5*1000000);
@@ -105,6 +150,14 @@ foreach($timeline as $tweet){
 			}
 		}
 	}
+}
+
+# After scanning each tweet write the last tweet to a JSON
+# Write out file for last tweet file id
+if (count($timeline)>0){
+	$handle = fopen(ROOT_DIR."/last_getblocks.json", 'w') or die('Cannot open file: '.ROOT_DIR."/last_getblocks.json");
+	fwrite($handle, '{"last_tweet_id":"'.$timeline[0]->id_str.'"}');
+	fclose($handle);
 }
 
 #Do Add Blockers
@@ -144,6 +197,37 @@ foreach($timeline as $tweet){
 				log_it("ERROR","NON AUTHORISED USER ATTEMPT TO ADD BLOCKER: ".$tweet->user->screen_name);
 			}
 		}
+	}
+}
+
+#Do REMOVE Blockers
+foreach($timeline as $tweet){
+	if (preg_match("/#RemoveBlocker/i", $tweet->text, $tmp)){
+		preg_match_all("/\@(\S+)/i", $tweet->text, &$results);
+		foreach ($results[0] as $result){
+			if (is_admin($tweet->user->screen_name) || is_super_admin($tweet->user->screen_name)){
+				$auth_user=preg_replace('/@/', '', $result);
+				$auth_user = strtolower($auth_user);
+				#if (is_user($auth_user)) { # NO LONGER NEED TO BE A USER FIRST
+				if (is_authorised_user($auth_user)) {
+					$user_id=is_valid_user($auth_user,$connection);
+					if ($user_id>0){
+						$my_file = BLOCKERS_DIR.$user_id.'¬'.$auth_user;
+						if (file_exists($my_file)) {
+							unlink($my_file);
+							log_it("INFO","USER ".$tweet->user->screen_name." REMOVED $auth_user FROM BLOCKERS LIST");
+						} else {
+							log_it("ERROR","USER ".$tweet->user->screen_name." TRIED TO REMOVE NON EXISTANT USER - $auth_user FROM BLOCKERS LIST");
+						}
+					} else {
+						log_it("ERROR","ATTEMPT BY ".$tweet->user->screen_name." TO ADD INVALID USER AS BLOCKER: ".$auth_user);
+					}
+				}
+				#}
+			 } else {
+				log_it("ERROR","NON AUTHORISED USER ATTEMPT TO ADD BLOCKER: ".$tweet->user->screen_name);
+			 }
+			}
 	}
 }
 
@@ -202,10 +286,12 @@ foreach($timeline as $tweet){
 						$my_file_L1 = BLOCKS_L1.$user_id.'¬'.$blocked_user;
 						$my_file_L2 = BLOCKS_L2.$user_id.'¬'.$blocked_user;
 						$my_file_L3 = BLOCKS_L3.$user_id.'¬'.$blocked_user;
-						if (file_exists($my_file_L1) || file_exists($my_file_L2) || file_exists($my_file_L3)) {
-							unlink($my_file_L1);
-							unlink($my_file_L2);
-							unlink($my_file_L3);
+						$my_file_L4 = BLOCKS_L4.$user_id.'¬'.$blocked_user;
+						if (file_exists($my_file_L1) || file_exists($my_file_L2) || file_exists($my_file_L3) || file_exists($my_file_L4)) {
+							if (file_exists($my_file_L1)) {unlink($my_file_L1);}
+							if (file_exists($my_file_L2)) {unlink($my_file_L2);}
+							if (file_exists($my_file_L3)) {unlink($my_file_L3);}
+							if (file_exists($my_file_L4)) {unlink($my_file_L4);}
 							# Need to create a file in removed blocks for this user so they are not re-added instantly
 							create_file(REM_BLOCKS_DIR.$user_id.'¬'.$blocked_user,"removed!");
 							log_it("INFO","USER REMOVED FROM BLOCK LIST: $blocked_user");
@@ -225,4 +311,69 @@ foreach($timeline as $tweet){
 		}
 	}
 }
+
+#Do Block ReLevelling 
+foreach($timeline as $tweet){
+	if (preg_match("/#ReLevel/i", $tweet->text, $tmp)){
+		preg_match_all("/\+(\S+)/i", $tweet->text, &$results);
+		foreach ($results[0] as $result){
+			if (is_authorised_user($tweet->user->screen_name)){
+				$blocked_user=preg_replace('/\+/','', $result);
+				$blocked_user = strtolower($blocked_user);
+				if (!is_removed_block($blocked_user)) {
+					$user_id=is_valid_user($blocked_user,$connection);
+					if ($user_id>0){
+						$my_file_L1 = BLOCKS_L1.$user_id.'¬'.$blocked_user;
+						$my_file_L2 = BLOCKS_L2.$user_id.'¬'.$blocked_user;
+						$my_file_L3 = BLOCKS_L3.$user_id.'¬'.$blocked_user;
+						$my_file_L4 = BLOCKS_L4.$user_id.'¬'.$blocked_user;
+						$start_level =0;
+						$end_level =0;
+						if (is_in_blocklist($user_id,$blocked_user)) {
+							if (file_exists($my_file_L1)) {unlink($my_file_L1);$start_level=1;}
+							if (file_exists($my_file_L2)) {unlink($my_file_L2);$start_level=2;}
+							if (file_exists($my_file_L3)) {unlink($my_file_L3);$start_level=3;}
+							if (file_exists($my_file_L4)) {unlink($my_file_L4);$start_level=4;}
+							# Need to create a file in the correct level for this user - only moves down as a re-add ups them so L2/3/4
+							# Level 4 by default if nothing is specified
+							if (preg_match("/#Level2/i", $tweet->text, $tmp)){
+								create_file(BLOCKS_L2.$user_id.'¬'.$blocked_user,"");
+								$end_level = 2;
+							} else if (preg_match("/#Level3/i", $tweet->text, $tmp)){
+								create_file(BLOCKS_L3.$user_id.'¬'.$blocked_user,"");
+								$end_level = 3;
+							} else {
+								create_file(BLOCKS_L4.$user_id.'¬'.$blocked_user,"");
+								$end_level = 4;
+							}
+							log_it("INFO","USER $blocked_user MOVED FROM LEVEL $start_level TO: $end_level");
+						} else {
+							log_it("ERROR","USER $blocked_user ALREADY MANUALLY REMOVED FROM BLOCKLIST");
+						}
+					} else {
+						log_it("ERROR","ATTEMPT BY ".$tweet->user->screen_name." TO MOVE LEVEL FOR : ".$blocked_user);
+					}
+				} else {
+					log_it("ERROR","USER $blocked_user REMOVED FROM BLOCKLIST");
+				}
+			} else {
+				log_it("ERROR","NON AUTHORISED USER ATTEMPT TO MOVE LEVEL OF USER ON BLOCK LIST: ".$tweet->user->screen_name);
+				}
+		}
+	}
+}
 stop_clock($starttime,"GET BLOCKS");
+
+# Check if blockee is anywhere in the block list 1-4
+function is_in_blocklist($user_id,$blockee) {
+	if (file_exists(BLOCKS_L3.$user_id.'¬'.$blockee)) {
+		return true;
+	} else if (file_exists(BLOCKS_L2.$user_id.'¬'.$blockee)) {
+		return true;
+	} else if (file_exists(BLOCKS_L1.$user_id.'¬'.$blockee)) {
+		return true;
+	} else if (file_exists(BLOCKS_L4.$user_id.'¬'.$blockee)) {
+		return true;
+	} 
+	return false;
+}
