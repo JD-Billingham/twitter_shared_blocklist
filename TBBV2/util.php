@@ -1,22 +1,5 @@
 <?php
-/*
- *     Licensed to the Apache Software Foundation (ASF) under one
-       or more contributor license agreements.  See the NOTICE file
-       distributed with this work for additional information
-       regarding copyright ownership.  The ASF licenses this file
-       to you under the Apache License, Version 2.0 (the
-       "License"); you may not use this file except in compliance
-       with the License.  You may obtain a copy of the License at
 
-         http://www.apache.org/licenses/LICENSE-2.0
-
-       Unless required by applicable law or agreed to in writing,
-       software distributed under the License is distributed on an
-       "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-       KIND, either express or implied.  See the License for the
-       specific language governing permissions and limitations
-       under the License.
- */
 function get_x_from_array($array,$return_num) {
 	$return_array=array();
 	if (count($array)<=0){
@@ -74,11 +57,20 @@ function is_user_spam($user_id) {
 	return false;
 }
 
+# Check there are no users in the removed blocks dir or those processed ... 
 function is_removed_block($screen_name)
 {
 	$results=get_users_in_dir(REM_BLOCKS_DIR);
-	return is_item_in_array_str($results[1],$screen_name);
+	if (is_item_in_array_str($results[1],$screen_name)) {
+		return true;
+	}
+	$results=get_users_in_dir(REM_BLOCKS_DIR."/processed/");
+	if (is_item_in_array_str($results[1],$screen_name)) {
+		return true;
+	}
+	return false;
 }
+# Check if the screen name is a user
 function is_user($screen_name)
 {
 	$results=get_users_in_dir(USERS_DIR);
@@ -141,7 +133,7 @@ function get_users_in_dir($dir)
 	foreach ($files as $file){
 		if (preg_match("/(\S+)\¬(\S+)/i", $file, $result)) {
 			# Build arrays
-			array_push($numerical_users, chop($result[1]));
+			array_push($numerical_users,chop($result[1]));
 			array_push($string_users, chop($result[2]));
 		}
 	}
@@ -174,19 +166,9 @@ function get_blocks_by_level($level)
  * Makes sure newest additions are blocked first and newest users are serviced first
  */
 function listdir_by_date($path){
-	$dir = opendir($path);
-	$list = array();
-	while($file = readdir($dir)){
-		if ($file != '.' and $file != '..'){
-			// add the filename, to be sure not to
-			// overwrite a array key
-			$ctime = filectime($path."/".$file) . ',' . $file;
-			$list[$ctime] = $file;
-		}
-	}
-	closedir($dir);
-	krsort($list);
-	return $list;
+	chdir($path);
+	array_multisort(array_map('filemtime', ($files = glob("*¬*"))), SORT_DESC, $files);
+	return $files;
 }
 
 /* User Auth is token,secret,level so this returns an array of three items
@@ -202,6 +184,34 @@ function get_user_auth($num_id,$str_id)
 		fclose($file_handle);
 	}
 	return $auth;
+}
+
+/* Bot applied blocks are stored as ids in a comma separated list
+ * GET LIST
+ */
+function get_bot_blocks($num_id)
+{
+	# ONLY use numerical ID as screen name can change!
+	$my_blocks_file=USERS_DIR."/user_blocks/".$num_id;
+	$blocks = array();
+	if (file_exists($my_blocks_file)) {
+		$file_handle = fopen($my_blocks_file, "r");
+		$line = fgets($file_handle);
+		$blocks = preg_split("/,/", $line,-1,PREG_SPLIT_NO_EMPTY);
+		fclose($file_handle);
+	}
+	return $blocks;
+}
+/* Bot applied blocks are stored as ids in a comma separated list
+ * SAVE LIST
+ */
+function write_bot_blocks($num_id,$block_array)
+{
+	# ONLY use numerical ID as screen name can change!
+	$my_blocks_file=USERS_DIR."/user_blocks/".$num_id;
+	$file_handle = fopen($my_blocks_file, "w");
+	fwrite($file_handle, implode(",",$block_array));
+	fclose($file_handle);
 }
 
 function is_valid_user($screen_name,$connection)
@@ -291,4 +301,41 @@ function create_file($file,$content) {
 	fwrite($handle, $content);
 	fclose($handle);
 	return true;
+}
+
+# Used in cleanup blocklist and show blocks
+# return twitter user objects from an array of ids.
+# Calls users/lookup in blocks of 90 to reduce calls
+function get_users_from_ids($my_user_id_blockees,$connection){
+	$num_per_call = 90;
+	# Used to count how many have been added and what array index
+	$count=0;
+	$index=0;
+	# Arrays of ids in comma separated list.
+	$call_array_ids = array();
+	$call_array_ids_tmp = array();
+	for ($i=0; $i<=(count($my_user_id_blockees)-1); $i++)
+	{
+		# Do in blocks of x
+		if ($count>=$num_per_call) {
+			$count=0;
+			$call_array_ids[$index]= implode(",", $call_array_ids_tmp);
+			$call_array_ids_tmp = array();
+			$index++;
+		}
+		array_push($call_array_ids_tmp, $my_user_id_blockees[$i]);
+		$count++;
+	}
+	$call_array_ids[$index]= implode(",", $call_array_ids_tmp);
+
+	$users=array();
+	# Loop over all and get the corresponding user objects
+	for ($i=0; $i<=(count($call_array_ids)-1); $i++)
+	{
+		$tmp_users=$connection->get("users/lookup",array('user_id' => $call_array_ids[$i]));
+		if (!isset($tmp_users->errors)) {
+			$users=array_merge($users,$tmp_users);
+		}
+	}
+	return $users;
 }
