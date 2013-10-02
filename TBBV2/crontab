@@ -1,13 +1,13 @@
 # (0-59)  (0-23)     (1-31)    (1-12 or Jan-Dec)  (0-6 or Sun-Sat)                
-   59,14,29,44     *          *             *               *          php -f /var/www/apbb/get_blocks.php >> /var/www/apbb/logs/get_blocks_log_$(date -u +\%Y\%m\%d) 2>&1
-   0,15,30,45     *          *             *               *          php -f /var/www/apbb/blocks_analysis/create_simple_blocks_csv.php >> /var/www/apbb/logs/create_csv_log_$(date -u +\%Y\%m\%d) 2>&1
-   0,15,30,45      *          *             *               *          php -f /var/www/apbb/blockem.php >> /var/www/apbb/logs/blockem_log_$(date -u +\%Y\%m\%d) 2>&1
-   13              *          *             *               *          php -f /var/www/apbb/cleanup_blocklist.php >> /var/www/apbb/logs/cleanup_blocklist_log_$(date -u +\%Y\%m\%d) 2>&1
-   1,16,31,46      *          *             *               *          php -f /var/www/apbb/build_blocks_page.php >> /var/www/apbb/logs/build_blocks_page_log_$(date -u +\%Y\%m\%d) 2>&1
-   1               *          *             *               *          php -f /var/www/apbb/logs/process_logs.php >> /var/www/apbb/logs/process_logs_log_$(date -u +\%Y\%m\%d) 2>&1
-   0               *          *             *               *          tar -uvf /home/ec2-user/apbb_backup/users_$(date -u +\%Y\%m\%dt\%H).tar /var/www/apbb/users
-   0               *          *             *               *          tar -uvf /home/ec2-user/apbb_backup/blocks_$(date -u +\%Y\%m\%dt\%H).tar /var/www/apbb/blocks
-   0               *          *             *               *          tar -uvf /home/ec2-user/apbb_backup/dead_blocks_$(date -u +\%Y\%m\%dt\%H).tar /var/www/apbb/dead_blocks
-   0               *          *             *               *          tar -uvf /home/ec2-user/apbb_backup/authorised_users_$(date -u +\%Y\%m\%dt\%H).tar /var/www/apbb/authorised_users
-   1               *          *             *               *          gzip /home/ec2-user/*.tar
-   2               *          *             *               *          /var/www/apbb/clean.sh
+0,5,10,15,20,25,30,35,40,45,50,55  * *   *               *          php -f /var/www/apbb/get_blocks.php >> /var/www/apbb/logs/get_blocks_log_$(date -u +\%Y\%m\%d) 2>&1
+0,15,30,45      *          *             *               *          php -f /var/www/apbb/blocks_analysis/create_simple_blocks_csv.php >> /var/www/apbb/logs/create_csv_log_$(date -u +\%Y\%m\%d) 2>&1
+0,15,30,45      *          *             *               *          php -f /var/www/apbb/blockem.php >> /var/www/apbb/logs/blockem_log_$(date -u +\%Y\%m\%d) 2>&1
+13              *          *             *               *          php -f /var/www/apbb/cleanup_blocklist.php >> /var/www/apbb/logs/cleanup_blocklist_log_$(date -u +\%Y\%m\%d) 2>&1
+30              *          *             *               *          php -f /var/www/apbb/unblockem.php >> /var/www/apbb/logs/unblockem_log_$(date -u +\%Y\%m\%d) 2>&1
+1,16,31,46      *          *             *               *          php -f /var/www/apbb/build_blocks_page.php >> /var/www/apbb/logs/build_blocks_page_log_$(date -u +\%Y\%m\%d) 2>&1
+0               *          *             *               *          tar -uvf /home/ec2-user/apbb_backup/users_$(date -u +\%Y\%m\%dt\%H).tar /var/www/apbb/users
+0               *          *             *               *          tar -uvf /home/ec2-user/apbb_backup/blocks_$(date -u +\%Y\%m\%dt\%H).tar /var/www/apbb/blocks
+0               *          *             *               *          tar -uvf /home/ec2-user/apbb_backup/dead_blocks_$(date -u +\%Y\%m\%dt\%H).tar /var/www/apbb/dead_blocks
+0               *          *             *               *          tar -uvf /home/ec2-user/apbb_backup/authorised_users_$(date -u +\%Y\%m\%dt\%H).tar /var/www/apbb/authorised_users
+1               *          *             *               *          gzip /home/ec2-user/*.tar
+2               *          *             *               *          /var/www/apbb/clean.sh
